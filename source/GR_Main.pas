@@ -4168,6 +4168,11 @@ begin
           )
       )
   );
+  if UserSettingsConfig.CountParams('MobileUiZoom') > 0 then
+  begin
+    SetGameMobileUiZoom(ParseDecimalToSingleW(UserSettingsConfig.GetParamByPathOrMarker('MobileUiZoom')));
+    CommitGameUiLayout;
+  end;
   EditableSaveBlock := TBlockParEC.Create;
   NewGameSettingsConfig := TBlockParEC.Create;
   Text := GetGameUserDirectory + 'newgame.txt';
