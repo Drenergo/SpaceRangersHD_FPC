@@ -48,6 +48,7 @@ function GameWindowIsFullscreenOnly: Boolean;
 // changes remain pending while a dialog or screen delays the rebuild.
 procedure ConfigureGameUi(Mode: TGameUiMode);
 procedure CommitGameUiLayout;
+procedure SetGameMobileUiZoom(Zoom: Double);
 function GameMobileUiEnabled: Boolean;
 function GameUiLayoutChangePending: Boolean;
 function GameWindowUsesNativeRaster: Boolean;
@@ -88,6 +89,10 @@ procedure SetGameArcadeControls(Flags: Integer);
 var
   // Read by settings; apply changes through ConfigureGameUi at a tree rebuild.
   GameUiMode: TGameUiMode = gumAutomatic;
+  // Multiplier on the platform density; values above 1 enlarge every mobile
+  // UI element. Read from SRHD_UI_ZOOM at video init, then from CFG.TXT
+  // (MobileUiZoom) before the window opens; both clamp to the same range.
+  GameMobileUiZoom: Double = 1;
   OnGameActivated, OnGameDeactivated: TNotifyEvent;
   GameSDLWindow: PSDL_Window;
   GameSDLRenderer: PSDL_Renderer;
@@ -289,6 +294,7 @@ begin
   MobileDensity := StrToFloatDef(string(SDL_GetHint('SRHD_UI_DENSITY')), 1, Format);
   if (MobileDensity <= 0) or IsNan(MobileDensity) or IsInfinite(MobileDensity) then
     MobileDensity := 1;
+  GameMobileUiZoom := Min(4.0, Max(0.25, StrToFloatDef(GetEnvironmentVariable('SRHD_UI_ZOOM'), 1, Format)));
   TouchSlop := EnsureRange(StrToIntDef(string(SDL_GetHint('SRHD_TOUCH_SLOP')), 8), 1, 256);
   PostedMessageType := SDL_RegisterEvents(1);
   if PostedMessageType = Cardinal(-1) then
@@ -363,6 +369,13 @@ begin
   UiDisplayMetrics := GetGameDisplayMetrics;
 end;
 
+procedure SetGameMobileUiZoom(Zoom: Double);
+begin
+  if (Zoom <= 0) or IsNan(Zoom) or IsInfinite(Zoom) then
+    Exit;
+  GameMobileUiZoom := Min(4.0, Max(0.25, Zoom));
+end;
+
 function GameMobileUiEnabled: Boolean;
 begin
   InitializeGameVideo;
@@ -431,11 +444,11 @@ var
 begin
   InitializeGameVideo;
   Result := Default(TGameDisplayMetrics);
-  Result.Density := MobileDensity;
+  Result.Density := MobileDensity * GameMobileUiZoom;
 {$IFDEF SWITCH}
   // The handheld's 720p panel needs larger touch targets than a TV layout.
   if SwitchHandheld <> 0 then
-    Result.Density := 1.5 * MobileDensity;
+    Result.Density := 1.5 * MobileDensity * GameMobileUiZoom;
 {$ENDIF}
   Result.TouchSlop := TouchSlop;
   if GameSDLWindow <> nil then
@@ -445,7 +458,7 @@ begin
     // Desktop UI sizes use window points, including Retina's backing scale.
     // Keep Android's supplied density: its window points are physical pixels.
     if not FullscreenOnlyWindow then
-      Result.Density := Max(1.0, Result.OutputSize.X / Max(1, Result.WindowSize.X));
+      Result.Density := Max(1.0, Result.OutputSize.X / Max(1, Result.WindowSize.X)) * GameMobileUiZoom;
   end
   else
   begin
